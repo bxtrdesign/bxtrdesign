@@ -4,255 +4,130 @@
   <meta charset="UTF-8">
   <title>bxtr.design</title>
   <link rel="stylesheet" href="style.css">
-
-  <style>
-    /* Fullscreen overlay for fade effect */
-    #fadeOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: black;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 1s ease;
-      z-index: 9999;
-    }
-  </style>
-
-  <script>
-    function redirectWithFade() {
-      const overlay = document.getElementById("fadeOverlay");
-      overlay.style.opacity = "1";
-      setTimeout(() => {
-        window.location.href = "https://bxtrdesign.com/home";
-      }, 1000);
-    }
-
-    document.addEventListener("click", redirectWithFade);
-  </script>
 </head>
 <body>
-  <div id="fadeOverlay"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<script>
+const baseWidth = 1920;
+const baseCellSize = 16;
+const minCellSize = 8;
+let highlightRadius = 300;
+let highlightFalloff = 0.7;
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-  <script>
-    const baseWidth = 1920;
-    const baseCellSize = 16;
-    const minCellSize = 8;
-    let highlightRadius = 300.0;
-    let highlightFalloff = 0.7;
+let asciiVideo; // desktop video
+let asciiImage; // mobile static image
+let videoReady = false;
 
-    let asciiSource; // video or static image
-    let asciiShader;
-    let videoReady = false;
+let asciiPalette = " bxtrBXTR.,'*+;:>";
+let isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
-    let asciiPalette = " bxtrBXTR.,'*+;:>";
-    let atlasGraphics;
-    const atlasCharSize = 64;
+let cols, rows;
+let scaledWidth, scaledHeight;
+let offsetX, offsetY;
+let aspectRatio;
 
-    let cols, rows;
-    let scaledWidth, scaledHeight;
-    let offsetX, offsetY;
-    let aspectRatio;
+function preload() {
+  if (!isMobile) {
+    asciiVideo = createVideo("bxtr.mp4");
+    asciiVideo.hide();
+    asciiVideo.volume(0);
+  } else {
+    asciiImage = loadImage("bxtrstatic.png");
+  }
+}
 
-    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  textFont("monospace");
+  textAlign(LEFT, TOP);
+  fill(255);
 
-    function setup() {
-      createCanvas(windowWidth, windowHeight, WEBGL);
-      noStroke();
-      textFont("monospace");
+  if (!isMobile) {
+    asciiVideo.elt.onloadedmetadata = () => {
+      asciiVideo.loop();
+      asciiVideo.play();
+      videoReady = true;
+      aspectRatio = asciiVideo.width / asciiVideo.height;
+      updateScaling();
+    };
+  } else {
+    // Mobile: calculate scale when image loaded
+    asciiImage.loadPixels();
+    aspectRatio = asciiImage.width / asciiImage.height;
+    updateScaling();
+    videoReady = true;
+  }
+}
 
-      // Sort palette by brightness
-      asciiPalette = sortPaletteByBrightness(asciiPalette, atlasCharSize);
+function updateScaling() {
+  const canvasAspect = width / height;
+  if(canvasAspect > aspectRatio){
+    scaledHeight = height;
+    scaledWidth = height * aspectRatio;
+  } else {
+    scaledWidth = width;
+    scaledHeight = width / aspectRatio;
+  }
+  offsetX = (width - scaledWidth) / 2;
+  offsetY = (height - scaledHeight) / 2;
 
-      // Generate ASCII atlas
-      atlasGraphics = createGraphics(asciiPalette.length * atlasCharSize, atlasCharSize);
-      atlasGraphics.background(0);
-      atlasGraphics.fill(255);
-      atlasGraphics.textAlign(LEFT, TOP);
-      atlasGraphics.textSize(atlasCharSize);
-      for (let i = 0; i < asciiPalette.length; i++) {
-        atlasGraphics.text(asciiPalette[i], i * atlasCharSize, 0);
-      }
+  let scaledCellSize = baseCellSize * (width / baseWidth);
+  scaledCellSize = max(scaledCellSize, minCellSize);
 
-      const vertShader = `
-        precision mediump float;
-        attribute vec3 aPosition;
-        varying vec2 vTexCoord;
-        void main() {
-          vTexCoord = aPosition.xy * 0.5 + 0.5;
-          gl_Position = vec4(aPosition, 1.0);
-        }
-      `;
+  cols = floor(scaledWidth / scaledCellSize);
+  rows = floor(scaledHeight / scaledCellSize);
+}
 
-      const fragShader = `
-        precision mediump float;
-        uniform sampler2D uSource;
-        uniform sampler2D uAtlas;
-        uniform vec2 uResolution;
-        uniform vec2 uMouse;
-        uniform float uRadius;
-        uniform float uFalloff;
-        uniform float uCols;
-        uniform float uRows;
-        uniform float uNumChars;
-        uniform vec2 uSourceScale;
-        uniform vec2 uSourceOffset;
-        varying vec2 vTexCoord;
+function draw() {
+  if (!videoReady) return;
+  background(0);
 
-        void main() {
-          vec2 fragPos = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y);
-          vec2 cellSize = vec2(uSourceScale.x / uCols, uSourceScale.y / uRows);
-          vec2 cell = floor((fragPos - uSourceOffset) / cellSize);
-          vec2 cellOrigin = cell * cellSize + uSourceOffset;
-          vec2 cellUV = (fragPos - cellOrigin) / cellSize;
+  loadPixels();
+  let img;
+  if (isMobile) img = asciiImage;
+  else img = asciiVideo;
 
-          vec2 pixelPos = cellOrigin + 0.5 * cellSize - uSourceOffset;
-          vec2 uv = clamp(pixelPos / uSourceScale, 0.0, 1.0);
-          vec4 color = texture2D(uSource, uv);
+  img.loadPixels();
 
-          float brightness = (color.r + color.g + color.b) / 3.0;
-          float idx = floor((1.0 - brightness) * (uNumChars - 1.0));
+  let cellWidth = scaledWidth / cols;
+  let cellHeight = scaledHeight / rows;
 
-          vec2 uvAtlas = vec2((idx + cellUV.x) / uNumChars, cellUV.y);
-          vec4 atlasColor = texture2D(uAtlas, uvAtlas);
+  let mouseXPos = isMobile && touches.length > 0 ? touches[0].x : mouseX;
+  let mouseYPos = isMobile && touches.length > 0 ? touches[0].y : mouseY;
 
-          vec2 cellCenter = cellOrigin + 0.5 * cellSize;
-          float distToMouse = distance(cellCenter, uMouse);
-          float highlightFactor = clamp(1.0 - distToMouse / uRadius, 0.0, 1.0);
-          highlightFactor = pow(highlightFactor, uFalloff);
+  for (let y=0; y<rows; y++){
+    for (let x=0; x<cols; x++){
+      let px = floor((x/cols) * img.width);
+      let py = floor((y/rows) * img.height);
+      let idx = (py*img.width + px) * 4;
+      let r = img.pixels[idx];
+      let g = img.pixels[idx+1];
+      let b = img.pixels[idx+2];
+      let brightness = (r+g+b)/3/255;
+      let charIdx = floor((1-brightness)*(asciiPalette.length-1));
+      let c = asciiPalette[charIdx];
 
-          vec4 highlightColor = vec4(color.rgb, 1.0);
-          vec4 finalColor = mix(vec4(color.rgb * atlasColor.rgb, 1.0), highlightColor, highlightFactor);
+      // Highlight factor
+      let cellCenterX = offsetX + x*cellWidth + cellWidth/2;
+      let cellCenterY = offsetY + y*cellHeight + cellHeight/2;
+      let dist = dist2D(cellCenterX, cellCenterY, mouseXPos, mouseYPos);
+      let highlight = constrain(1 - dist/highlightRadius, 0, 1);
+      highlight = pow(highlight, highlightFalloff);
 
-          gl_FragColor = finalColor;
-        }
-      `;
-
-      asciiShader = createShader(vertShader, fragShader);
-
-      if(isMobile){
-        // Mobile: load static PNG
-        asciiSource = loadImage("bxtrstatic.png", img => {
-          img.loadPixels();
-          aspectRatio = img.width / img.height;
-
-          // Scale & center
-          const canvasAspect = width / height;
-          if(canvasAspect > aspectRatio){
-            scaledHeight = height;
-            scaledWidth = height * aspectRatio;
-          } else {
-            scaledWidth = width;
-            scaledHeight = width / aspectRatio;
-          }
-
-          offsetX = (width - scaledWidth) / 2;
-          offsetY = (height - scaledHeight) / 2;
-
-          let scaledCellSize = baseCellSize * (width / baseWidth);
-          scaledCellSize = max(scaledCellSize, minCellSize);
-
-          cols = floor(scaledWidth / scaledCellSize);
-          rows = floor(scaledHeight / scaledCellSize);
-
-          videoReady = true;
-        });
-      } else {
-        // Desktop: video
-        asciiSource = createVideo("bxtr.mp4");
-        asciiSource.hide();
-        asciiSource.volume(0);
-        asciiSource.elt.muted = true;
-        asciiSource.elt.onloadedmetadata = () => {
-          asciiSource.loop();
-          asciiSource.play();
-          videoReady = true;
-          aspectRatio = asciiSource.width / asciiSource.height;
-          updateScaling();
-        };
-      }
+      fill(lerpColor(color(r,g,b), color(255,255,255), highlight));
+      text(c, offsetX + x*cellWidth, offsetY + y*cellHeight);
     }
+  }
+}
 
-    function updateScaling() {
-      const canvasAspect = width / height;
-      if(canvasAspect > aspectRatio){
-        scaledHeight = height;
-        scaledWidth = height * aspectRatio;
-      } else {
-        scaledWidth = width;
-        scaledHeight = width / aspectRatio;
-      }
+function dist2D(x1, y1, x2, y2){
+  return sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1));
+}
 
-      offsetX = (width - scaledWidth) / 2;
-      offsetY = (height - scaledHeight) / 2;
-
-      let scaledCellSize = baseCellSize * (width / baseWidth);
-      scaledCellSize = max(scaledCellSize, minCellSize);
-
-      cols = floor(scaledWidth / scaledCellSize);
-      rows = floor(scaledHeight / scaledCellSize);
-    }
-
-    function sortPaletteByBrightness(palette, sampleSize = 64){
-      const tempCanvas = createGraphics(sampleSize, sampleSize);
-      tempCanvas.textSize(sampleSize);
-      tempCanvas.textAlign(CENTER, CENTER);
-      tempCanvas.background(0);
-
-      const brightnessValues = [];
-      for(let i=0;i<palette.length;i++){
-        tempCanvas.background(0);
-        tempCanvas.fill(255);
-        tempCanvas.text(palette[i], sampleSize/2, sampleSize/2);
-        tempCanvas.loadPixels();
-        let total = 0;
-        for(let px of tempCanvas.pixels) total += brightness(px);
-        brightnessValues.push(total/tempCanvas.pixels.length);
-      }
-
-      const paired = palette.split('').map((c,i)=>[c,brightnessValues[i]]);
-      paired.sort((a,b)=>a[1]-b[1]);
-      return paired.map(p=>p[0]).join('');
-    }
-
-    function draw() {
-      if(!videoReady) return;
-
-      shader(asciiShader);
-
-      let mousePos = [mouseX, mouseY];
-      if(isMobile && touches.length > 0){
-        mousePos = [touches[0].x, touches[0].y];
-      }
-
-      asciiShader.setUniform("uMouse", mousePos);
-      asciiShader.setUniform("uSource", asciiSource);
-      asciiShader.setUniform("uAtlas", atlasGraphics.get());
-      asciiShader.setUniform("uResolution", [width, height]);
-      asciiShader.setUniform("uRadius", highlightRadius);
-      asciiShader.setUniform("uFalloff", highlightFalloff);
-      asciiShader.setUniform("uCols", cols);
-      asciiShader.setUniform("uRows", rows);
-      asciiShader.setUniform("uNumChars", asciiPalette.length);
-      asciiShader.setUniform("uSourceScale", [scaledWidth, scaledHeight]);
-      asciiShader.setUniform("uSourceOffset", [offsetX, offsetY]);
-
-      beginShape(TRIANGLE_STRIP);
-      vertex(-1, -1, 0);
-      vertex(1, -1, 0);
-      vertex(-1, 1, 0);
-      vertex(1, 1, 0);
-      endShape();
-    }
-
-    function windowResized() {
-      resizeCanvas(windowWidth, windowHeight);
-      if(videoReady) updateScaling();
-    }
-
-  </script>
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  if(videoReady) updateScaling();
+}
+</script>
 </body>
 </html>
