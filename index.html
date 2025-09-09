@@ -19,25 +19,6 @@
       transition: opacity 1s ease;
       z-index: 9999;
     }
-
-    /* Mobile start overlay */
-    #mobileStart {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      display: none;
-      justify-content: center;
-      align-items: center;
-      background: black;
-      color: white;
-      font-family: monospace;
-      font-size: 48px;
-      cursor: pointer;
-      z-index: 9998;
-      user-select: none;
-    }
   </style>
 
   <script>
@@ -54,7 +35,6 @@
 </head>
 <body>
   <div id="fadeOverlay"></div>
-  <div id="mobileStart">[click]</div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script>
@@ -65,7 +45,7 @@
   let highlightRadius = 300.0;
   let highlightFalloff = 0.7;
 
-  let asciiSource;      // Will be video or static image
+  let asciiSource;      // Video or static image
   let asciiShader;
   let videoReady = false;
 
@@ -167,16 +147,13 @@
     asciiShader = createShader(vertShader, fragShader);
 
     if(isMobile){
-      const startDiv = document.getElementById("mobileStart");
-      startDiv.style.display = "flex";
-      startDiv.addEventListener("click", (e) => {
-        e.stopPropagation();
-        videoReady = true;
-        aspectRatio = asciiSource.width / asciiSource.height;
-        updateScaling();
-        startDiv.style.display = "none";
-      }, { once:true });
+      // Mobile: static image
+      asciiSource.loadPixels(); // ensure ready
+      videoReady = true;
+      aspectRatio = asciiSource.width / asciiSource.height;
+      updateScaling();
     } else {
+      // Desktop: video
       asciiSource.elt.onloadedmetadata = () => {
         asciiSource.loop();
         asciiSource.play();
@@ -234,7 +211,12 @@
 
     shader(asciiShader);
 
-    asciiShader.setUniform("uMouse", [mouseX, mouseY]);
+    let mousePos = [mouseX, mouseY];
+    if(isMobile && touches.length > 0){
+      mousePos = [touches[0].x, touches[0].y];
+    }
+
+    asciiShader.setUniform("uMouse", mousePos);
     asciiShader.setUniform("uSource", asciiSource);
     asciiShader.setUniform("uAtlas", atlasGraphics.get());
     asciiShader.setUniform("uResolution", [width, height]);
