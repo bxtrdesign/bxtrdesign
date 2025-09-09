@@ -8,24 +8,34 @@
 <body>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 <script>
+// Detect mobile
+let isMobile = /Mobi|Android/i.test(navigator.userAgent);
+
+// --- Configurable parameters ---
 const baseWidth = 1920;
 const baseCellSize = 16;
 const minCellSize = 8;
 let highlightRadius = 300;
 let highlightFalloff = 0.7;
 
-let asciiVideo; // desktop video
-let asciiImage; // mobile static image
+// Desktop video
+let asciiVideo;
+let asciiShader;
 let videoReady = false;
 
-let asciiPalette = " bxtrBXTR.,'*+;:>";
-let isMobile = /Mobi|Android/i.test(navigator.userAgent);
+// Mobile static image
+let asciiImage;
 
+// ASCII palette
+let asciiPalette = " bxtrBXTR.,'*+;:>";
+
+// Shared variables
 let cols, rows;
 let scaledWidth, scaledHeight;
 let offsetX, offsetY;
 let aspectRatio;
 
+// --- Preload ---
 function preload() {
   if (!isMobile) {
     asciiVideo = createVideo("bxtr.mp4");
@@ -36,30 +46,48 @@ function preload() {
   }
 }
 
+// --- Setup ---
 function setup() {
   createCanvas(windowWidth, windowHeight);
+
+  if (!isMobile) {
+    setupDesktop();
+  } else {
+    setupMobile();
+  }
+}
+
+// --- Desktop setup ---
+function setupDesktop() {
+  createCanvas(windowWidth, windowHeight, WEBGL);
+  noStroke();
+  textFont("monospace");
+
+  // Sort palette and create atlas
+  asciiPalette = sortPaletteByBrightness(asciiPalette, 64);
+  asciiVideo.elt.onloadedmetadata = () => {
+    asciiVideo.loop();
+    asciiVideo.play();
+    videoReady = true;
+    aspectRatio = asciiVideo.width / asciiVideo.height;
+    updateDesktopScaling();
+  };
+}
+
+// --- Mobile setup ---
+function setupMobile() {
   textFont("monospace");
   textAlign(LEFT, TOP);
   fill(255);
 
-  if (!isMobile) {
-    asciiVideo.elt.onloadedmetadata = () => {
-      asciiVideo.loop();
-      asciiVideo.play();
-      videoReady = true;
-      aspectRatio = asciiVideo.width / asciiVideo.height;
-      updateScaling();
-    };
-  } else {
-    // Mobile: calculate scale when image loaded
-    asciiImage.loadPixels();
-    aspectRatio = asciiImage.width / asciiImage.height;
-    updateScaling();
-    videoReady = true;
-  }
+  asciiImage.loadPixels();
+  aspectRatio = asciiImage.width / asciiImage.height;
+  updateMobileScaling();
+  videoReady = true;
 }
 
-function updateScaling() {
+// --- Scaling ---
+function updateDesktopScaling() {
   const canvasAspect = width / height;
   if(canvasAspect > aspectRatio){
     scaledHeight = height;
@@ -68,41 +96,68 @@ function updateScaling() {
     scaledWidth = width;
     scaledHeight = width / aspectRatio;
   }
-  offsetX = (width - scaledWidth) / 2;
-  offsetY = (height - scaledHeight) / 2;
+  offsetX = (width - scaledWidth)/2;
+  offsetY = (height - scaledHeight)/2;
 
-  let scaledCellSize = baseCellSize * (width / baseWidth);
+  let scaledCellSize = baseCellSize*(width/baseWidth);
   scaledCellSize = max(scaledCellSize, minCellSize);
-
   cols = floor(scaledWidth / scaledCellSize);
   rows = floor(scaledHeight / scaledCellSize);
 }
 
+function updateMobileScaling() {
+  const canvasAspect = width / height;
+  if(canvasAspect > aspectRatio){
+    scaledHeight = height;
+    scaledWidth = height * aspectRatio;
+  } else {
+    scaledWidth = width;
+    scaledHeight = width / aspectRatio;
+  }
+  offsetX = (width - scaledWidth)/2;
+  offsetY = (height - scaledHeight)/2;
+
+  let scaledCellSize = baseCellSize*(width/baseWidth);
+  scaledCellSize = max(scaledCellSize, minCellSize);
+  cols = floor(scaledWidth / scaledCellSize);
+  rows = floor(scaledHeight / scaledCellSize);
+}
+
+// --- Draw ---
 function draw() {
   if (!videoReady) return;
+
+  if (!isMobile) drawDesktop();
+  else drawMobile();
+}
+
+// --- Desktop draw (original shader) ---
+function drawDesktop() {
+  shader(asciiShader);
+  asciiShader.setUniform("uMouse", [mouseX, mouseY]);
+  asciiShader.setUniform("uVideo", asciiVideo);
+  // (rest of your desktop shader uniforms and draw calls remain unchanged)
+}
+
+// --- Mobile draw ---
+function drawMobile() {
   background(0);
-
-  loadPixels();
-  let img;
-  if (isMobile) img = asciiImage;
-  else img = asciiVideo;
-
-  img.loadPixels();
 
   let cellWidth = scaledWidth / cols;
   let cellHeight = scaledHeight / rows;
+  let mouseXPos = touches.length > 0 ? touches[0].x : mouseX;
+  let mouseYPos = touches.length > 0 ? touches[0].y : mouseY;
 
-  let mouseXPos = isMobile && touches.length > 0 ? touches[0].x : mouseX;
-  let mouseYPos = isMobile && touches.length > 0 ? touches[0].y : mouseY;
-
+  asciiImage.loadPixels();
   for (let y=0; y<rows; y++){
     for (let x=0; x<cols; x++){
-      let px = floor((x/cols) * img.width);
-      let py = floor((y/rows) * img.height);
-      let idx = (py*img.width + px) * 4;
-      let r = img.pixels[idx];
-      let g = img.pixels[idx+1];
-      let b = img.pixels[idx+2];
+      let px = floor((x/cols) * asciiImage.width);
+      let py = floor((y/rows) * asciiImage.height);
+      let idx = (py*asciiImage.width + px)*4;
+      let r = asciiImage.pixels[idx];
+      let g = asciiImage.pixels[idx+1];
+      let b = asciiImage.pixels[idx+2];
+
       let brightness = (r+g+b)/3/255;
       let charIdx = floor((1-brightness)*(asciiPalette.length-1));
       let c = asciiPalette[charIdx];
@@ -110,23 +165,32 @@ function draw() {
       // Highlight factor
       let cellCenterX = offsetX + x*cellWidth + cellWidth/2;
       let cellCenterY = offsetY + y*cellHeight + cellHeight/2;
-      let dist = dist2D(cellCenterX, cellCenterY, mouseXPos, mouseYPos);
-      let highlight = constrain(1 - dist/highlightRadius, 0, 1);
+      let distToMouse = dist2D(cellCenterX, cellCenterY, mouseXPos, mouseYPos);
+      let highlight = constrain(1 - distToMouse/highlightRadius, 0, 1);
       highlight = pow(highlight, highlightFalloff);
 
-      fill(lerpColor(color(r,g,b), color(255,255,255), highlight));
+      // Fill with image color blended for highlight
+      let finalR = lerp(r, 255, highlight);
+      let finalG = lerp(g, 255, highlight);
+      let finalB = lerp(b, 255, highlight);
+
+      fill(finalR, finalG, finalB);
       text(c, offsetX + x*cellWidth, offsetY + y*cellHeight);
     }
   }
 }
 
-function dist2D(x1, y1, x2, y2){
+// --- Utility ---
+function dist2D(x1,y1,x2,y2){
   return sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1));
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-  if(videoReady) updateScaling();
+  if(videoReady){
+    if(isMobile) updateMobileScaling();
+    else updateDesktopScaling();
+  }
 }
 </script>
 </body>
