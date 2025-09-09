@@ -61,15 +61,20 @@
   const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
   function preload() {
-    if(isMobile){
-      asciiSource = loadImage("bxtrstatic.png");
-    } else {
-      asciiSource = createVideo("bxtr.mp4");
-      asciiSource.hide();
-      asciiSource.volume(0);
-      asciiSource.elt.muted = true;
-    }
+  if(isMobile){
+    // Load image and wait for it to finish
+    asciiSource = loadImage("bxtrstatic.png", () => {
+      videoReady = true;
+      aspectRatio = asciiSource.width / asciiSource.height;
+      updateScaling();
+    });
+  } else {
+    asciiSource = createVideo("bxtr.mp4");
+    asciiSource.hide();
+    asciiSource.volume(0);
+    asciiSource.elt.muted = true;
   }
+}
 
   function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL);
