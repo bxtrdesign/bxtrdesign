@@ -4,22 +4,53 @@
   <meta charset="UTF-8">
   <title>GPU ASCII Video</title>
   <link rel="stylesheet" href="style.css">
+
+  <style>
+    /* Fullscreen overlay for fade effect */
+    #fadeOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: black;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 1s ease;
+      z-index: 9999;
+    }
+  </style>
+
+  <script>
+    function redirectWithFade() {
+      const overlay = document.getElementById("fadeOverlay");
+      overlay.style.opacity = "1"; // fade in
+      setTimeout(() => {
+        window.location.href = "https://bxtr.design.com/home";
+      }, 1000); // wait for fade (1s)
+    }
+
+    document.addEventListener("click", redirectWithFade);
+  </script>
 </head>
 <body>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-<script>
+  <div id="fadeOverlay"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script>
+
+// --- Configurable parameters ---
+const baseWidth = 1920;        // reference width for density
+const baseCellSize = 16;       // target cell size at baseline width
+const minCellSize = 8;         // minimum cell size (prevents unreadable detail on small screens)
+let highlightRadius = 300.0;   // How far the circular highlight reaches
+let highlightFalloff = 0.7;    // Exponent controlling fade toward edges
+// --------------------------------
 
 let asciiVideo;
 let asciiShader;
 let videoReady = false;
 
 let asciiPalette = " bxtrBXTR.,'*+;:>";
-
-// --- Configurable parameters ---
-const targetCellSize = 16;        // Base cell size for ASCII grid
-let highlightRadius = 300.0;      // How far the circular highlight reaches
-let highlightFalloff = 0.7;       // Exponent controlling fade toward edges
-// --------------------------------
 
 let atlasGraphics;
 const atlasCharSize = 64;
@@ -139,9 +170,12 @@ function updateVideoScaling() {
   offsetX = (width - scaledVideoWidth) / 2.0;
   offsetY = (height - scaledVideoHeight) / 2.0;
 
-  // Compute cols/rows to maintain density
-  cols = floor(scaledVideoWidth / targetCellSize);
-  rows = floor(scaledVideoHeight / targetCellSize);
+  // 🔧 Dynamic density scaling
+  let scaledCellSize = baseCellSize * (width / baseWidth);
+  scaledCellSize = max(scaledCellSize, minCellSize);
+
+  cols = floor(scaledVideoWidth / scaledCellSize);
+  rows = floor(scaledVideoHeight / scaledCellSize);
 }
 
 function sortPaletteByBrightness(palette, sampleSize = 64){
