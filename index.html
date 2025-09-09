@@ -46,7 +46,7 @@
       overlay.style.opacity = "1"; // fade in
       setTimeout(() => {
         window.location.href = "https://bxtrdesign.com/home";
-      }, 1000); // wait for fade (1s)
+      }, 1000);
     }
 
     document.addEventListener("click", redirectWithFade);
@@ -165,11 +165,12 @@
 
     asciiShader = createShader(vertShader, fragShader);
 
-    // Mobile: show overlay and wait for user tap
+    // Mobile overlay click
     if(isMobile){
       const startDiv = document.getElementById("mobileStart");
       startDiv.style.display = "flex";
-      startDiv.addEventListener("click", () => {
+      startDiv.addEventListener("click", (e) => {
+        e.stopPropagation(); // prevent redirect
         asciiVideo.loop();
         asciiVideo.play();
         videoReady = true;
@@ -178,7 +179,7 @@
         startDiv.style.display = "none";
       }, { once:true });
     } else {
-      // Desktop behavior: exactly as before
+      // Desktop: original behavior
       asciiVideo.elt.onloadedmetadata = () => {
         asciiVideo.loop();
         asciiVideo.play();
