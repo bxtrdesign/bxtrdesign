@@ -21,6 +21,7 @@
   </style>
 
   <script>
+    // Fade-click redirect
     function redirectWithFade() {
       const overlay = document.getElementById("fadeOverlay");
       overlay.style.opacity = "1";
@@ -35,10 +36,9 @@
   <div id="fadeOverlay"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script>
-
-const baseWidth = 1920;
-const baseCellSize = 16;
-const minCellSize = 8;
+let baseWidth = 1920;
+let baseCellSize = 16;
+let minCellSize = 8;
 let highlightRadius = 300.0;
 let highlightFalloff = 0.7;
 
@@ -51,30 +51,18 @@ const atlasCharSize = 64;
 
 let cols, rows, scaledVideoWidth, scaledVideoHeight, offsetX, offsetY, videoAspect;
 
-// Detect mobile
 const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
 function preload() {
-  // Mobile-friendly video setup
   asciiVideo = createVideo("bxtr.mp4", () => {
     asciiVideo.hide();
     asciiVideo.loop();
     asciiVideo.volume(0);
+    asciiVideo.elt.muted = true; // critical for mobile autoplay
   });
-  asciiVideo.elt.muted = true; // critical for mobile autoplay
 }
 
 function setup() {
-  if(isMobile){
-    createCanvas(windowWidth, windowHeight); // fallback 2D canvas
-    background(0); 
-    fill(255);
-    textSize(32);
-    textAlign(CENTER, CENTER);
-    text("Mobile video shader unsupported", width/2, height/2);
-    return;
-  }
-
   createCanvas(windowWidth, windowHeight, WEBGL);
   noStroke();
   textFont("monospace");
@@ -88,10 +76,11 @@ function setup() {
   atlasGraphics.fill(255);
   atlasGraphics.textAlign(LEFT, TOP);
   atlasGraphics.textSize(atlasCharSize);
-  for(let i=0;i<asciiPalette.length;i++){
-    atlasGraphics.text(asciiPalette[i], i*atlasCharSize,0);
+  for (let i = 0; i < asciiPalette.length; i++) {
+    atlasGraphics.text(asciiPalette[i], i * atlasCharSize, 0);
   }
 
+  // Shaders (high precision)
   const vertShader = `
     precision highp float;
     attribute vec3 aPosition;
@@ -142,18 +131,28 @@ function setup() {
 
   asciiShader = createShader(vertShader, fragShader);
 
-  asciiVideo.elt.onloadedmetadata = () => {
-    asciiVideo.loop();
-    asciiVideo.play();
-    videoReady = true;
-    videoAspect = asciiVideo.width / asciiVideo.height;
-    updateVideoScaling();
-  };
+  // Only enable videoReady when safe to render
+  if (isMobile) {
+    // Wait for first tap on mobile to start video & shader
+    document.body.addEventListener("click", () => {
+      asciiVideo.play();
+      videoReady = true;
+    }, { once: true });
+  } else {
+    // Desktop: play immediately
+    asciiVideo.elt.onloadedmetadata = () => {
+      asciiVideo.loop();
+      asciiVideo.play();
+      videoReady = true;
+      videoAspect = asciiVideo.width / asciiVideo.height;
+      updateVideoScaling();
+    };
+  }
 }
 
 function updateVideoScaling() {
   const canvasAspect = width / height;
-  if(canvasAspect>videoAspect){
+  if (canvasAspect > videoAspect) {
     scaledVideoHeight = height;
     scaledVideoWidth = height * videoAspect;
   } else {
@@ -162,10 +161,12 @@ function updateVideoScaling() {
   }
   offsetX = (width - scaledVideoWidth)/2.0;
   offsetY = (height - scaledVideoHeight)/2.0;
-  let scaledCellSize = baseCellSize*(width/baseWidth);
-  scaledCellSize = max(scaledCellSize,minCellSize);
-  cols = floor(scaledVideoWidth/scaledCellSize);
-  rows = floor(scaledVideoHeight/scaledCellSize);
+
+  let scaledCellSize = baseCellSize * (width / baseWidth);
+  scaledCellSize = max(scaledCellSize, minCellSize);
+
+  cols = floor(scaledVideoWidth / scaledCellSize);
+  rows = floor(scaledVideoHeight / scaledCellSize);
 }
 
 function sortPaletteByBrightness(palette,sampleSize=64){
@@ -189,8 +190,14 @@ function sortPaletteByBrightness(palette,sampleSize=64){
 }
 
 function draw() {
-  if(isMobile) return; // fallback already drawn
-  if(!videoReady) return;
+  if (!videoReady) {
+    // Optional loading screen
+    background(0);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    text("Loading...", 0, 0);
+    return;
+  }
 
   shader(asciiShader);
   asciiShader.setUniform("uMouse",[mouseX,mouseY]);
@@ -215,7 +222,7 @@ function draw() {
 
 function windowResized(){
   resizeCanvas(windowWidth,windowHeight);
-  if(!isMobile) updateVideoScaling();
+  if (!isMobile) updateVideoScaling();
 }
   </script>
 </body>
