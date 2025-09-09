@@ -24,7 +24,7 @@
   <script>
     function redirectWithFade() {
       const overlay = document.getElementById("fadeOverlay");
-      overlay.style.opacity = "1"; // fade in
+      overlay.style.opacity = "1";
       setTimeout(() => {
         window.location.href = "https://bxtrdesign.com/home";
       }, 1000);
@@ -38,14 +38,13 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script>
-
   const baseWidth = 1920;
   const baseCellSize = 16;
   const minCellSize = 8;
   let highlightRadius = 300.0;
   let highlightFalloff = 0.7;
 
-  let asciiSource;      // Video or static image
+  let asciiSource; // video or static image
   let asciiShader;
   let videoReady = false;
 
@@ -59,22 +58,6 @@
   let aspectRatio;
 
   const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-
-  function preload() {
-  if(isMobile){
-    // Load image and wait for it to finish
-    asciiSource = loadImage("bxtrstatic.png", () => {
-      videoReady = true;
-      aspectRatio = asciiSource.width / asciiSource.height;
-      updateScaling();
-    });
-  } else {
-    asciiSource = createVideo("bxtr.mp4");
-    asciiSource.hide();
-    asciiSource.volume(0);
-    asciiSource.elt.muted = true;
-  }
-}
 
   function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL);
@@ -152,13 +135,19 @@
     asciiShader = createShader(vertShader, fragShader);
 
     if(isMobile){
-      // Mobile: static image
-      asciiSource.loadPixels(); // ensure ready
-      videoReady = true;
-      aspectRatio = asciiSource.width / asciiSource.height;
-      updateScaling();
+      // Mobile: load static PNG in setup with callback
+      asciiSource = loadImage("bxtrstatic.png", img => {
+        videoReady = true;
+        aspectRatio = img.width / img.height;
+        updateScaling();
+        img.loadPixels(); // ensure pixels ready for shader
+      });
     } else {
       // Desktop: video
+      asciiSource = createVideo("bxtr.mp4");
+      asciiSource.hide();
+      asciiSource.volume(0);
+      asciiSource.elt.muted = true;
       asciiSource.elt.onloadedmetadata = () => {
         asciiSource.loop();
         asciiSource.play();
@@ -216,6 +205,7 @@
 
     shader(asciiShader);
 
+    // Mouse or touch highlights
     let mousePos = [mouseX, mouseY];
     if(isMobile && touches.length > 0){
       mousePos = [touches[0].x, touches[0].y];
